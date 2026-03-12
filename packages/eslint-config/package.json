@@ -2,11 +2,15 @@
   "name": "@packages/eslint-config",
   "version": "0.1.0",
   "private": true,
-  "main": "index.cjs",
+  "type": "module",
+  "exports": {
+    ".": "./eslint.config.js"
+  },
   "peerDependencies": {
-    "eslint": "^8.0.0",
+    "eslint": "^9.0.0",
     "typescript": "^5.0.0",
     "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@eslint/js": "^9.0.0"
   }
 }
