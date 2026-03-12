@@ -1,0 +1,8 @@
+node_modules
+pnpm-lock.yaml
+coverage
+dist
+.vite
+playwright-report
+test-results
+.wrangler

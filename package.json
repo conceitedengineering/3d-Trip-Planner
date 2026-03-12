@@ -1,0 +1,46 @@
+{
+  "name": "sf-3d-transit-explorer",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "format": "pnpm -r --if-present format",
+    "test": "pnpm -r --if-present test",
+    "test:coverage": "pnpm -r --if-present test:coverage",
+    "coverage:gate": "node scripts/check-transit-core-coverage.mjs",
+    "build": "pnpm -r --if-present build",
+    "build:web": "pnpm --filter @apps/web build",
+    "build:worker": "pnpm --filter @apps/worker build",
+    "e2e": "pnpm --filter @apps/web e2e",
+    "ci": "pnpm typecheck && pnpm lint && pnpm test:coverage && pnpm coverage:gate && pnpm build:web && pnpm build:worker && pnpm e2e",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "@typescript-eslint/eslint-plugin": "^8.43.0",
+    "@typescript-eslint/parser": "^8.43.0",
+    "@vitest/coverage-v8": "^2.1.9",
+    "eslint": "^8.57.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.6",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2",
+    "vitest": "^2.1.9"
+  },
+  "lint-staged": {
+    "*.{js,cjs,mjs,ts,tsx}": [
+      "eslint --max-warnings=0 --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml,css}": [
+      "prettier --write"
+    ]
+  }
+}

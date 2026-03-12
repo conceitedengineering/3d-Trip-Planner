@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/transit-core" },
+    { "path": "tools/gtfs-pipeline" },
+    { "path": "apps/web" },
+    { "path": "apps/worker" }
+  ]
+}

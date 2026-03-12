@@ -1,0 +1,11 @@
+name = "sf-transit-explorer"
+main = "src/index.ts"
+compatibility_date = "2026-03-11"
+workers_dev = true
+
+[assets]
+directory = "../web/dist"
+binding = "ASSETS"
+
+[vars]
+APP_VERSION = "v1"

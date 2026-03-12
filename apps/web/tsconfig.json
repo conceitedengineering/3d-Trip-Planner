@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "types": ["vite/client", "vitest/globals"]
+  },
+  "include": ["src", "tests", "playwright.config.ts"],
+  "references": [{ "path": "../../packages/transit-core" }]
+}

@@ -1,0 +1,4 @@
+stop_id,stop_name,stop_lat,stop_lon,wheelchair_boarding
+S1,Market St & 5th,37.7834,-122.4081,1
+S2,Montgomery,37.7894,-122.4011,1
+S3,Embarcadero,37.7929,-122.3969,1

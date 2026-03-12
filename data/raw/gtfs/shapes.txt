@@ -1,0 +1,4 @@
+shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence
+shape_n,37.7834,-122.4081,1
+shape_n,37.7894,-122.4011,2
+shape_n,37.7929,-122.3969,3
