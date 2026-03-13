@@ -1,4 +1,5 @@
 import type {
+  BuildingsData,
   GraphData,
   Manifest,
   RouteRecord,
@@ -12,4 +13,5 @@ export interface LoadedTransitAssets {
   routes: RouteRecord[];
   graph: GraphData;
   shapes: ShapesMap;
+  buildings: BuildingsData | null;
 }

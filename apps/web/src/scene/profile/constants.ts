@@ -15,7 +15,7 @@ export const RENDER_PROFILE_CONFIG: Record<RenderProfile, RenderProfileConfig> =
     ssao: true,
     antialias: true,
     fxaa: true,
-    stopMarkerCap: 1000,
+    stopMarkerCap: Number.POSITIVE_INFINITY,
     resolutionScale: 1,
   },
   PERFORMANCE: {

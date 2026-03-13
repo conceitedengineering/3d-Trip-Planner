@@ -1,5 +1,6 @@
 import type {
   AssetName,
+  BuildingsData,
   GraphData,
   Manifest,
   RouteRecord,
@@ -17,6 +18,7 @@ export interface CriticalTransitAssets {
   routes: RouteRecord[];
   graph: GraphData;
   loadShapes: () => Promise<ShapesMap>;
+  loadBuildings: () => Promise<BuildingsData | null>;
 }
 
 export async function loadCriticalTransitAssets(options: LoadOptions): Promise<CriticalTransitAssets> {
@@ -41,6 +43,13 @@ export async function loadCriticalTransitAssets(options: LoadOptions): Promise<C
     routes,
     graph,
     loadShapes: () => loadJson<ShapesMap>(manifest.files.shapes, 'shapes', options.onAssetStatus),
+    loadBuildings: () => {
+      if (!manifest.files.buildings) {
+        options.onAssetStatus('buildings', 'failed');
+        return Promise.resolve(null);
+      }
+      return loadJson<BuildingsData>(manifest.files.buildings, 'buildings', options.onAssetStatus);
+    },
   };
 }
 

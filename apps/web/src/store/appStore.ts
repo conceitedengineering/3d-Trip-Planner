@@ -31,6 +31,7 @@ const initialAssetStatus: Record<AssetName, 'loading' | 'loaded' | 'failed'> = {
   routes: 'loading',
   graph: 'loading',
   shapes: 'loading',
+  buildings: 'loading',
 };
 
 export const useAppStore = create<AppState>((set) => ({
@@ -43,10 +44,14 @@ export const useAppStore = create<AppState>((set) => ({
   routeStatus: 'idle',
   assetStatus: initialAssetStatus,
   renderProfile: 'PERFORMANCE',
-  setSelectedStopId: (value) => set({ selectedStopId: value }),
-  setOriginStopId: (value) => set({ originStopId: value }),
-  setDestinationStopId: (value) => set({ destinationStopId: value }),
-  setSelectedRouteId: (value) => set({ selectedRouteId: value }),
+  setSelectedStopId: (value) =>
+    set((state) => (state.selectedStopId === value ? state : { selectedStopId: value })),
+  setOriginStopId: (value) =>
+    set((state) => (state.originStopId === value ? state : { originStopId: value })),
+  setDestinationStopId: (value) =>
+    set((state) => (state.destinationStopId === value ? state : { destinationStopId: value })),
+  setSelectedRouteId: (value) =>
+    set((state) => (state.selectedRouteId === value ? state : { selectedRouteId: value })),
   toggleLayer: (layer) =>
     set((state) => {
       const next = new Set(state.activeLayers);
@@ -57,8 +62,8 @@ export const useAppStore = create<AppState>((set) => ({
       }
       return { activeLayers: next };
     }),
-  setRouteResult: (value) => set({ routeResult: value }),
-  setRouteStatus: (value) => set({ routeStatus: value }),
+  setRouteResult: (value) => set((state) => (state.routeResult === value ? state : { routeResult: value })),
+  setRouteStatus: (value) => set((state) => (state.routeStatus === value ? state : { routeStatus: value })),
   setAssetStatus: (asset, status) =>
     set((state) => ({
       assetStatus: {
@@ -66,5 +71,6 @@ export const useAppStore = create<AppState>((set) => ({
         [asset]: status,
       },
     })),
-  setRenderProfile: (profile) => set({ renderProfile: profile }),
+  setRenderProfile: (profile) =>
+    set((state) => (state.renderProfile === profile ? state : { renderProfile: profile })),
 }));

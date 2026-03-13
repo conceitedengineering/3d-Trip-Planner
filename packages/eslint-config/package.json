@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./eslint.config.js"
+    ".": "./eslint.config.mjs"
   },
   "peerDependencies": {
     "eslint": "^9.0.0",

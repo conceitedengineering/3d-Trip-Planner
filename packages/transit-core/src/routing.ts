@@ -1,4 +1,4 @@
-import type { GraphData, GraphEdge, RouteResult, RouteResultMeta, ShapesMap } from './types';
+import type { GraphData, GraphEdge, RouteResult, RouteResultMeta, ShapesMap } from './types.js';
 
 interface ComputeRouteInput {
   graph: GraphData;

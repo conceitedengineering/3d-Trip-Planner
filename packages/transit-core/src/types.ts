@@ -1,4 +1,4 @@
-export type AssetName = 'manifest' | 'stops' | 'routes' | 'graph' | 'shapes';
+export type AssetName = 'manifest' | 'stops' | 'routes' | 'graph' | 'shapes' | 'buildings';
 
 export type RenderProfile = 'QUALITY' | 'PERFORMANCE';
 
@@ -41,12 +41,27 @@ export interface GraphData {
 
 export type ShapesMap = Record<string, number[]>;
 
+export interface BuildingRecord {
+  id: string;
+  coords: number[];
+  height: number;
+  isLandmark: boolean;
+}
+
+export interface BuildingsData {
+  buildings: BuildingRecord[];
+  landmarkIds: string[];
+  totalCount: number;
+  landmarkCount: number;
+}
+
 export interface ManifestFileMap {
   stops: string;
   routes: string;
   graph: string;
   shapes: string;
-  [key: string]: string;
+  buildings?: string;
+  [key: string]: string | undefined;
 }
 
 export interface Manifest {

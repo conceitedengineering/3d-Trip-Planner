@@ -1,12 +1,20 @@
 #!/usr/bin/env node
 import path from 'node:path';
 
-import { buildProcessedData, loadGtfsDirectory, writeProcessedArtifacts } from './pipeline';
+import {
+  buildBuildingsData,
+  buildProcessedData,
+  loadBuildingsGeoJson,
+  loadGtfsDirectory,
+  writeProcessedArtifacts,
+} from './pipeline.js';
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? 'build';
   const rawDir = process.argv[3] ?? path.resolve(process.cwd(), 'data/raw/gtfs');
   const outputDir = process.argv[4] ?? path.resolve(process.cwd(), 'apps/web/public/transit');
+  const buildingsGeoJsonPath =
+    process.argv[5] ?? path.resolve(process.cwd(), 'data/raw/buildings/sf_buildings.geojson');
 
   if (command === 'fetch') {
     console.log('fetch command is intentionally thin in V1; place GTFS files in', rawDir);
@@ -19,6 +27,13 @@ async function main(): Promise<void> {
 
   const gtfs = await loadGtfsDirectory(rawDir);
   const processed = buildProcessedData(gtfs);
+  let buildings = null;
+  try {
+    const rawBuildings = await loadBuildingsGeoJson(buildingsGeoJsonPath);
+    buildings = buildBuildingsData(rawBuildings);
+  } catch {
+    buildings = null;
+  }
 
   if (command === 'stats') {
     console.log(
@@ -28,6 +43,8 @@ async function main(): Promise<void> {
           routes: processed.routes.length,
           edges: processed.graph.edges.length,
           shapes: Object.keys(processed.shapes).length,
+          buildings: buildings?.totalCount ?? 0,
+          landmarks: buildings?.landmarkCount ?? 0,
           bbox: processed.bbox,
         },
         null,
@@ -46,7 +63,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  const manifest = await writeProcessedArtifacts(outputDir, processed);
+  const manifest = await writeProcessedArtifacts(
+    outputDir,
+    processed,
+    buildings ? { buildings } : {},
+  );
   console.log(`Wrote processed transit assets to ${outputDir}`);
   console.log(JSON.stringify(manifest, null, 2));
 }

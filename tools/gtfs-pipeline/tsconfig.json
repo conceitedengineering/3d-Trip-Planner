@@ -2,8 +2,13 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
-    "types": ["node", "vitest/globals"]
+    "types": [
+      "node",
+      "vitest/globals"
+    ]
   },
-  "include": ["src", "test"],
-  "references": [{ "path": "../../packages/transit-core" }]
+  "include": [
+    "src",
+    "test"
+  ]
 }

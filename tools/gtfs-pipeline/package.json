@@ -10,9 +10,12 @@
     "test:coverage": "vitest run --coverage",
     "format": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "build": "tsc -p tsconfig.build.json",
-    "pipeline": "node dist/index.js"
+    "pipeline": "node dist/src/index.js"
   },
   "dependencies": {
     "@packages/transit-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.15"
   }
 }

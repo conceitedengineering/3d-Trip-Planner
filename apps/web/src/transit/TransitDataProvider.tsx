@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
-import type { GraphData, Manifest, RouteRecord, ShapesMap, StopRecord } from '@packages/transit-core';
+import type {
+  BuildingsData,
+  GraphData,
+  Manifest,
+  RouteRecord,
+  ShapesMap,
+  StopRecord,
+} from '@packages/transit-core';
 import { useAppStore } from '../store/appStore';
 import { loadCriticalTransitAssets } from './loadTransitAssets';
 
@@ -10,6 +17,7 @@ interface TransitContextValue {
   routes: RouteRecord[];
   graph: GraphData | null;
   shapes: ShapesMap;
+  buildings: BuildingsData | null;
   isCriticalReady: boolean;
   loadError: string | null;
 }
@@ -24,6 +32,7 @@ export function TransitDataProvider({ children }: { children: React.ReactNode })
   const [routes, setRoutes] = useState<RouteRecord[]>([]);
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [shapes, setShapes] = useState<ShapesMap>({});
+  const [buildings, setBuildings] = useState<BuildingsData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,6 +65,19 @@ export function TransitDataProvider({ children }: { children: React.ReactNode })
             }
           }
         });
+
+        requestAnimationFrame(async () => {
+          try {
+            const loadedBuildings = await critical.loadBuildings();
+            if (!cancelled) {
+              setBuildings(loadedBuildings);
+            }
+          } catch (error) {
+            if (!cancelled) {
+              setLoadError(error instanceof Error ? error.message : 'Failed to load buildings');
+            }
+          }
+        });
       } catch (error) {
         if (!cancelled) {
           setLoadError(error instanceof Error ? error.message : 'Failed to load transit assets');
@@ -77,10 +99,11 @@ export function TransitDataProvider({ children }: { children: React.ReactNode })
       routes,
       graph,
       shapes,
+      buildings,
       isCriticalReady: manifest !== null && graph !== null && stops.length > 0 && routes.length > 0,
       loadError,
     }),
-    [manifest, stops, routes, graph, shapes, loadError],
+    [manifest, stops, routes, graph, shapes, buildings, loadError],
   );
 
   return <TransitDataContext.Provider value={value}>{children}</TransitDataContext.Provider>;

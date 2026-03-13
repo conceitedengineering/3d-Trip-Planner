@@ -4,6 +4,8 @@ import path from 'node:path';
 
 import {
   applyFrequencyWeight,
+  type BuildingsData,
+  type BuildingRecord,
   computeFrequencyMultiplier,
   computeFrequencyNorm,
   projectEquirectangularMeters,
@@ -36,10 +38,50 @@ interface BuildOutput {
   bbox: [number, number, number, number];
 }
 
+interface GeoJsonFeatureCollection {
+  features: GeoJsonFeature[];
+  type: 'FeatureCollection';
+}
+
+interface GeoJsonFeature {
+  geometry: {
+    coordinates: unknown;
+    type: 'Polygon' | 'MultiPolygon';
+  } | null;
+  properties: Record<string, unknown> | null;
+  type: 'Feature';
+}
+
+interface BuildingCandidate {
+  centroidX: number;
+  centroidY: number;
+  coords: number[];
+  height: number;
+  id: string;
+  isLandmark: boolean;
+  name: string | null;
+}
+
 interface BuildOptions {
   representativeServiceId?: string;
   transferPenaltyMinutes?: number;
 }
+
+const SIMPLIFY_VERTEX_EPSILON_METERS = 0.5;
+const MIN_BUILDING_AREA_M2 = 10;
+
+const LANDMARK_TARGETS: Array<{ count?: number; lat: number; lon: number; name: string }> = [
+  { lat: 37.7952, lon: -122.4028, name: 'Transamerica Pyramid' },
+  { lat: 37.7895, lon: -122.3973, name: 'Salesforce Tower' },
+  { lat: 37.7793, lon: -122.4193, name: 'City Hall' },
+  { lat: 37.7955, lon: -122.3937, name: 'Ferry Building' },
+  { lat: 37.7679, lon: -122.3876, name: 'Chase Center' },
+  { lat: 37.7786, lon: -122.3893, name: 'Oracle Park' },
+  { lat: 37.7837, lon: -122.416, name: "St. Mary's Cathedral" },
+  { lat: 37.7921, lon: -122.4163, name: 'Grace Cathedral' },
+  { lat: 37.8024, lon: -122.4058, name: 'Coit Tower' },
+  { count: 6, lat: 37.7762, lon: -122.4328, name: 'Painted Ladies' },
+];
 
 export async function loadGtfsDirectory(rawDir: string): Promise<GtfsData> {
   return {
@@ -98,7 +140,6 @@ export function buildProcessedData(data: GtfsData, options: BuildOptions = {}): 
     accessible: stop.wheelchair_boarding === '1',
   }));
 
-  const stopById = new Map(stops.map((stop) => [stop.id, stop]));
   const projectedStops = new Map(
     stops.map((stop) => [stop.id, projectEquirectangularMeters(stop.lat, stop.lon)]),
   );
@@ -193,9 +234,78 @@ export function buildProcessedData(data: GtfsData, options: BuildOptions = {}): 
   return { stops, routes, shapes, graph, bbox };
 }
 
+export async function loadBuildingsGeoJson(filePath: string): Promise<GeoJsonFeatureCollection> {
+  const raw = await readFile(filePath, 'utf8');
+  return JSON.parse(raw) as GeoJsonFeatureCollection;
+}
+
+export function buildBuildingsData(collection: GeoJsonFeatureCollection): BuildingsData {
+  const candidates: BuildingCandidate[] = [];
+
+  collection.features.forEach((feature, featureIndex) => {
+    if (!feature.geometry) {
+      return;
+    }
+
+    const polygons = extractOuterRings(feature.geometry);
+    if (polygons.length === 0) {
+      return;
+    }
+
+    const props = feature.properties ?? {};
+    const baseId = resolveBuildingId(props, featureIndex);
+    const resolvedName = resolveFeatureName(props);
+
+    polygons.forEach((ring, ringIndex) => {
+      const projected = simplifyFlatCoords(projectRingToMeters(ring), SIMPLIFY_VERTEX_EPSILON_METERS);
+      if (projected.length < 6) {
+        return;
+      }
+
+      const area = polygonArea(projected);
+      if (area < MIN_BUILDING_AREA_M2) {
+        return;
+      }
+
+      const centroid = polygonCentroid(projected);
+      const height = resolveHeightMeters(props, area);
+      const id = polygons.length > 1 ? `${baseId}_p${ringIndex}` : baseId;
+
+      candidates.push({
+        centroidX: centroid.x,
+        centroidY: centroid.y,
+        coords: projected,
+        height,
+        id,
+        isLandmark: false,
+        name: resolvedName,
+      });
+    });
+  });
+
+  applyLandmarkClassification(candidates);
+
+  const buildings: BuildingRecord[] = candidates.map((candidate) => ({
+    id: candidate.id,
+    coords: candidate.coords,
+    height: candidate.height,
+    isLandmark: candidate.isLandmark,
+  }));
+
+  const landmarkIds = buildings.filter((building) => building.isLandmark).map((building) => building.id);
+
+  return {
+    buildings,
+    landmarkIds,
+    totalCount: buildings.length,
+    landmarkCount: landmarkIds.length,
+  };
+}
+
 export async function writeProcessedArtifacts(
   outputDir: string,
   output: BuildOutput,
+  options: { buildings?: BuildingsData } = {},
   version = Date.now().toString(),
 ): Promise<Manifest> {
   await mkdir(outputDir, { recursive: true });
@@ -205,11 +315,12 @@ export async function writeProcessedArtifacts(
   const shapesName = writeHashed(outputDir, 'shapes', output.shapes);
   const graphName = writeHashed(outputDir, 'graph', output.graph);
 
-  const [stopsFile, routesFile, shapesFile, graphFile] = await Promise.all([
+  const [stopsFile, routesFile, shapesFile, graphFile, buildingsFile] = await Promise.all([
     stopsName,
     routesName,
     shapesName,
     graphName,
+    options.buildings ? writeHashed(outputDir, 'buildings', options.buildings) : Promise.resolve(null),
   ]);
 
   const manifest: Manifest = {
@@ -220,6 +331,7 @@ export async function writeProcessedArtifacts(
       routes: `/transit/${routesFile}`,
       shapes: `/transit/${shapesFile}`,
       graph: `/transit/${graphFile}`,
+      ...(buildingsFile ? { buildings: `/transit/${buildingsFile}` } : {}),
     },
     bbox: output.bbox,
     stopCount: output.stops.length,
@@ -227,6 +339,9 @@ export async function writeProcessedArtifacts(
   };
 
   await writeFile(path.join(outputDir, 'manifest.json'), JSON.stringify(manifest));
+  if (options.buildings) {
+    await writeFile(path.join(outputDir, 'buildings.min.json'), JSON.stringify(options.buildings));
+  }
 
   return manifest;
 }
@@ -371,4 +486,256 @@ function normalizeColor(input: string | undefined, fallback: string): string {
     return fallback;
   }
   return value.toUpperCase();
+}
+
+function extractOuterRings(
+  geometry: GeoJsonFeature['geometry'],
+): number[][][] {
+  if (!geometry) {
+    return [];
+  }
+
+  if (geometry.type === 'Polygon') {
+    const coordinates = geometry.coordinates as number[][][];
+    return coordinates.length > 0 ? [coordinates[0]] : [];
+  }
+
+  if (geometry.type === 'MultiPolygon') {
+    const coordinates = geometry.coordinates as number[][][][];
+    return coordinates
+      .map((polygon) => polygon[0])
+      .filter((ring): ring is number[][] => Array.isArray(ring) && ring.length > 0);
+  }
+
+  return [];
+}
+
+function projectRingToMeters(ring: number[][]): number[] {
+  const result: number[] = [];
+
+  ring.forEach((point) => {
+    if (!Array.isArray(point) || point.length < 2) {
+      return;
+    }
+
+    const lon = Number(point[0]);
+    const lat = Number(point[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return;
+    }
+
+    const projected = projectEquirectangularMeters(lat, lon);
+    result.push(projected.x, projected.y);
+  });
+
+  return result;
+}
+
+function simplifyFlatCoords(flat: number[], minDistance: number): number[] {
+  if (flat.length < 6) {
+    return flat;
+  }
+
+  const points: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < flat.length; i += 2) {
+    points.push({ x: flat[i], y: flat[i + 1] });
+  }
+
+  if (points.length >= 2 && distance(points[0], points[points.length - 1]) < minDistance) {
+    points.pop();
+  }
+
+  const simplified: Array<{ x: number; y: number }> = [];
+  points.forEach((point) => {
+    const prev = simplified[simplified.length - 1];
+    if (!prev || distance(prev, point) >= minDistance) {
+      simplified.push(point);
+    }
+  });
+
+  if (simplified.length >= 2 && distance(simplified[0], simplified[simplified.length - 1]) < minDistance) {
+    simplified.pop();
+  }
+
+  if (simplified.length < 3) {
+    return [];
+  }
+
+  return simplified.flatMap((point) => [point.x, point.y]);
+}
+
+function polygonArea(coords: number[]): number {
+  const pointCount = coords.length / 2;
+  if (pointCount < 3) {
+    return 0;
+  }
+
+  let sum = 0;
+  for (let i = 0; i < pointCount; i += 1) {
+    const j = (i + 1) % pointCount;
+    const xi = coords[i * 2];
+    const yi = coords[i * 2 + 1];
+    const xj = coords[j * 2];
+    const yj = coords[j * 2 + 1];
+    sum += xi * yj - xj * yi;
+  }
+
+  return Math.abs(sum) / 2;
+}
+
+function polygonCentroid(coords: number[]): { x: number; y: number } {
+  let x = 0;
+  let y = 0;
+  const pointCount = coords.length / 2;
+
+  for (let i = 0; i < pointCount; i += 1) {
+    x += coords[i * 2];
+    y += coords[i * 2 + 1];
+  }
+
+  return {
+    x: x / pointCount,
+    y: y / pointCount,
+  };
+}
+
+function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function resolveHeightMeters(props: Record<string, unknown>, area: number): number {
+  const medianMeters = toPositiveNumber(props.hgt_median_m);
+  if (medianMeters) {
+    return medianMeters;
+  }
+
+  const meanCm = toPositiveNumber(props.hgt_meancm);
+  if (meanCm) {
+    return meanCm / 100;
+  }
+
+  if (area < 100) {
+    return 4;
+  }
+  if (area <= 500) {
+    return 7;
+  }
+  return 10.5;
+}
+
+function toPositiveNumber(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  return null;
+}
+
+function resolveBuildingId(props: Record<string, unknown>, fallbackIndex: number): string {
+  const direct = [props.globalid, props.sf16_bldgid, props.area_id]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .find((value) => value.length > 0);
+
+  return direct ?? `building_${fallbackIndex}`;
+}
+
+function resolveFeatureName(props: Record<string, unknown>): string | null {
+  const preferred = ['name', 'building_name', 'p2010_name'];
+
+  for (const key of preferred) {
+    const matchedKey = Object.keys(props).find((candidate) => candidate.toLowerCase() === key);
+    if (!matchedKey) {
+      continue;
+    }
+
+    const value = props[matchedKey];
+    if (typeof value === 'string') {
+      const normalized = value.trim();
+      if (normalized.length > 0 && normalized.toLowerCase() !== 'null') {
+        return normalized;
+      }
+    }
+  }
+
+  const genericNameKey = Object.keys(props).find((candidate) => candidate.toLowerCase().includes('name'));
+  if (genericNameKey) {
+    const value = props[genericNameKey];
+    if (typeof value === 'string') {
+      const normalized = value.trim();
+      if (normalized.length > 0 && normalized.toLowerCase() !== 'null') {
+        return normalized;
+      }
+    }
+  }
+
+  return null;
+}
+
+function applyLandmarkClassification(candidates: BuildingCandidate[]): void {
+  const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  const used = new Set<string>();
+
+  LANDMARK_TARGETS.forEach((target) => {
+    const targetPoint = projectEquirectangularMeters(target.lat, target.lon);
+
+    if (target.name === 'Painted Ladies') {
+      const nearest = [...candidates]
+        .sort((a, b) => {
+          const da = squaredDistance(a.centroidX, a.centroidY, targetPoint.x, targetPoint.y);
+          const db = squaredDistance(b.centroidX, b.centroidY, targetPoint.x, targetPoint.y);
+          return da - db;
+        })
+        .slice(0, target.count ?? 1);
+
+      nearest.forEach((candidate) => {
+        candidate.isLandmark = true;
+        used.add(candidate.id);
+      });
+      return;
+    }
+
+    const matchedByName = candidates.find((candidate) =>
+      candidate.name?.toLowerCase().includes(target.name.toLowerCase()),
+    );
+
+    if (matchedByName) {
+      matchedByName.isLandmark = true;
+      used.add(matchedByName.id);
+      return;
+    }
+
+    let nearest: BuildingCandidate | null = null;
+    let nearestDist = Number.POSITIVE_INFINITY;
+    for (const candidate of candidates) {
+      if (used.has(candidate.id)) {
+        continue;
+      }
+      const d2 = squaredDistance(candidate.centroidX, candidate.centroidY, targetPoint.x, targetPoint.y);
+      if (d2 < nearestDist) {
+        nearest = candidate;
+        nearestDist = d2;
+      }
+    }
+
+    if (nearest) {
+      const mutable = byId.get(nearest.id);
+      if (mutable) {
+        mutable.isLandmark = true;
+      }
+      used.add(nearest.id);
+    }
+  });
+}
+
+function squaredDistance(ax: number, ay: number, bx: number, by: number): number {
+  const dx = ax - bx;
+  const dy = ay - by;
+  return dx * dx + dy * dy;
 }

@@ -11,7 +11,7 @@ export function SceneReadySignal(): null {
 
     firedRef.current = true;
     window.dispatchEvent(new CustomEvent('scene:ready'));
-  }, 1000);
+  });
 
   return null;
 }

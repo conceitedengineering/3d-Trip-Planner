@@ -6,3 +6,8 @@ dist
 playwright-report
 test-results
 .wrangler
+.playwright-cli
+*.tsbuildinfo
+apps/web/.env.local
+data/raw/buildings
+data/processed
